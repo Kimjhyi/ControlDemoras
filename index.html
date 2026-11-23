@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ControlDemoras — Sistema Integrado para Agencias Aduanales</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        maritime: { 50:'#f1f4f8', 100:'#dde4ec', 200:'#c2cedb', 500:'#14395a', 600:'#0e2c47', 700:'#081f33', accent:'#9a7b3c' },
+                        brass: '#9a7b3c'
+                    },
+                    fontFamily: {
+                        sans: ['IBM Plex Sans', 'sans-serif'],
+                        serif: ['IBM Plex Serif', 'serif'],
+                        mono: ['IBM Plex Mono', 'monospace']
+                    },
+                    borderRadius: { lg:'4px', xl:'6px', '2xl':'8px' }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'IBM Plex Sans', sans-serif; overflow-x: hidden; }
+        h1, h2 { font-family: 'IBM Plex Serif', serif; letter-spacing: -0.01em; }
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        :focus-visible { outline: 2px solid #14395a; outline-offset: 2px; }
+        .home-hero {
+            background:
+                radial-gradient(110% 90% at 88% 0%, rgba(58,104,148,.55) 0%, transparent 55%),
+                radial-gradient(80% 70% at 0% 100%, rgba(154,123,60,.22) 0%, transparent 60%),
+                linear-gradient(165deg, #061525 0%, #0a2038 100%);
+        }
+        .home-hero :focus-visible { outline-color: #fff; }
+        .tnum { font-variant-numeric: tabular-nums; }
+        @media (max-width: 767px) {
+            input, select, textarea { font-size: 16px !important; }
+            #toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
+            #toast-container > div { max-width: none; }
+            #return-modal > div, #companies-modal > div { max-height: 92vh; overflow-y: auto; }
+            #s3-tab-active, #s3-tab-returned { flex: 1 1 0; min-width: 0; line-height: 1.25; }
+            /* Tablas como tarjetas apiladas */
+            .resp-table, .resp-table tbody { display: block; width: 100%; }
+            .resp-table thead { display: none; }
+            .resp-table tr { display: block; padding: .75rem 1rem; border-bottom: 1px solid #e2e8f0; }
+            .resp-table td { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .35rem 0 !important; text-align: right; white-space: normal !important; }
+            .resp-table td::before { content: attr(data-label); font-size: .75rem; color: #64748b; text-align: left; flex-shrink: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+    <!-- ===================================================================== -->
+    <!-- UNIFIED TOP NAVIGATION BAR                                            -->
+    <!-- ===================================================================== -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between xl:grid xl:grid-cols-[1fr_auto_1fr]">
+            <nav class="hidden xl:flex items-stretch gap-6 h-16" aria-label="Principal">
+                <button onclick="navigateTo('home')" id="nav-home" class="nav-btn h-16 flex items-center gap-1.5 text-sm font-medium text-slate-600 border-b-2 border-transparent">Inicio</button>
+                <button onclick="navigateTo('summary')" id="nav-summary" class="nav-btn h-16 flex items-center gap-1.5 text-sm font-medium text-slate-600 border-b-2 border-transparent">Resumen</button>
+                <button onclick="navigateTo('stage1')" id="nav-stage1" class="nav-btn h-16 flex items-center gap-1.5 text-sm font-medium text-slate-600 border-b-2 border-transparent">Captura</button>
+                <button onclick="navigateTo('stage2')" id="nav-stage2" class="nav-btn h-16 flex items-center gap-1.5 text-sm font-medium text-slate-600 border-b-2 border-transparent">
+                    <span>Tablero</span>
+                    <span id="nav-badge-alert" class="bg-rose-700 text-white text-[11px] font-semibold px-1.5 rounded-full tnum">0</span>
+                </button>
+                <button onclick="navigateTo('stage3')" id="nav-stage3" class="nav-btn h-16 flex items-center gap-1.5 text-sm font-medium text-slate-600 border-b-2 border-transparent">
+                    <span>Dictamen</span>
+                    <span id="nav-badge-returned" class="bg-slate-600 text-white text-[11px] font-semibold px-1.5 rounded-full tnum">0</span>
+                </button>
+            </nav>
+
+            <button onclick="navigateTo('home')" class="flex items-center gap-3 text-left justify-self-center">
+                <div class="bg-maritime-500 text-white p-2 rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m-8-10L4 17v-10m8 4v10"></path></svg>
+                </div>
+                <div>
+                    <h1 class="font-semibold text-lg text-maritime-700 leading-none">ControlDemoras</h1>
+                    <p class="text-[11px] text-slate-500 mt-1 hidden sm:block">Agencia aduanal, Puerto de Veracruz</p>
+                </div>
+            </button>
+
+            <div class="flex items-center gap-3 justify-self-end">
+                <div class="hidden xl:block text-right">
+
+                    <p class="text-xs text-slate-500">Tráfico y operaciones</p>
+                </div>
+                <div class="w-9 h-9 rounded-full bg-maritime-100 border border-maritime-200 flex items-center justify-center text-maritime-700 font-semibold text-xs">CD</div>
+            </div>
+        </div>
+
+        <div class="xl:hidden border-t border-slate-100 bg-slate-50 px-2 py-1.5 grid grid-cols-5 gap-1 text-center">
+            <button onclick="navigateTo('home')" id="mnav-home" class="mnav-btn py-2.5 rounded-lg text-[11px] font-semibold">Inicio</button>
+            <button onclick="navigateTo('summary')" id="mnav-summary" class="mnav-btn py-2.5 rounded-lg text-[11px] font-semibold">Resumen</button>
+            <button onclick="navigateTo('stage1')" id="mnav-stage1" class="mnav-btn py-2.5 rounded-lg text-[11px] font-semibold">Captura</button>
+            <button onclick="navigateTo('stage2')" id="mnav-stage2" class="mnav-btn py-2.5 rounded-lg text-[11px] font-semibold">Tablero</button>
+            <button onclick="navigateTo('stage3')" id="mnav-stage3" class="mnav-btn py-2.5 rounded-lg text-[11px] font-semibold">Dictamen</button>
+        </div>
+    </header>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ===================================================================== -->
+    <!-- MAIN WORKSPACE CONTAINER                                              -->
+    <!-- ===================================================================== -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-grow w-full">
+
+        <!-- ================================================================= -->
+        <!-- VIEW 0: PÁGINA DE INICIO (FLUJO DEL SISTEMA)                      -->
+        <!-- ================================================================= -->
+        <section id="view-home" class="view-section active">
+            <div class="home-hero relative left-1/2 w-screen -ml-[50vw] -mt-8 overflow-hidden text-white">
+                <svg class="absolute inset-0 w-full h-full opacity-[.07]" viewBox="0 0 1440 520" preserveAspectRatio="none" aria-hidden="true" fill="none" stroke="#fff"><path d="M-40 380C220 280 420 460 720 360S1180 240 1480 330"/><path d="M-40 430C240 340 440 500 740 410S1200 300 1480 380"/><path d="M-40 330C200 230 400 410 700 310S1160 190 1480 280"/></svg>
+                <div class="relative max-w-4xl mx-auto px-5 py-12 sm:py-28 text-center">
+                    <div class="flex flex-wrap justify-center gap-2 mb-8 sm:mb-12">
+                        <button onclick="navigateTo('home')" class="rounded-full px-5 py-2.5 text-sm font-medium bg-white text-maritime-700">Inicio</button>
+                        <button onclick="navigateTo('summary')" class="rounded-full px-5 py-2.5 text-sm font-medium bg-white/10 hover:bg-white/20 border border-white/10 text-white transition">Resumen</button>
+                        <button onclick="navigateTo('stage1')" class="rounded-full px-5 py-2.5 text-sm font-medium bg-white/10 hover:bg-white/20 border border-white/10 text-white transition">Captura de contenedores</button>
+                        <button onclick="navigateTo('stage2')" class="rounded-full px-5 py-2.5 text-sm font-medium bg-white/10 hover:bg-white/20 border border-white/10 text-white transition">Tablero semáforo</button>
+                        <button onclick="navigateTo('stage3')" class="rounded-full px-5 py-2.5 text-sm font-medium bg-white/10 hover:bg-white/20 border border-white/10 text-white transition">Dictamen y documentos</button>
+                    </div>
+                    <h2 class="text-3xl sm:text-5xl font-semibold leading-tight">Control de demoras de contenedores marítimos</h2>
+                    <p class="mt-5 text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">Seguimiento de fechas límite de devolución, desglose por compañía y expedición de constancias oficiales para agencias aduanales.</p>
+                    <form onsubmit="heroSearch(event)" class="mt-10 max-w-2xl mx-auto flex items-center bg-white rounded-full pl-5 pr-2 py-2 shadow-lg">
+                        <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"></path></svg>
+                        <input id="hero-search" type="text" autocomplete="off" aria-label="Buscar contenedor" placeholder="Buscar contenedor, cliente o producto" class="flex-1 min-w-0 bg-transparent text-slate-800 text-base px-3 py-2 focus:outline-none">
+                        <button type="submit" class="bg-maritime-500 hover:bg-maritime-600 text-white text-sm font-medium px-5 py-2.5 rounded-full transition">Buscar</button>
+                    </form>
+                    <div class="mt-8 flex flex-wrap items-center justify-center gap-2 text-sm">
+                        <span class="text-slate-400 mr-1">Consultas frecuentes</span>
+                        <button onclick="goToFilter('red')" class="rounded-full border border-white/30 hover:bg-white/10 px-4 py-1.5 text-white transition">Vencidos</button>
+                        <button onclick="goToFilter('yellow')" class="rounded-full border border-white/30 hover:bg-white/10 px-4 py-1.5 text-white transition">Por vencer (0 a 3 días)</button>
+                        <button onclick="goToFilter('green')" class="rounded-full border border-white/30 hover:bg-white/10 px-4 py-1.5 text-white transition">A tiempo</button>
+                    </div>
+                </div>
+            </div>
+
+            </section>
+
+        <section id="view-summary" class="view-section">
+            <div class="mb-8">
+                <span class="text-sm font-medium text-slate-500">Vista general</span>
+                <h2 class="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mt-2">Resumen operativo</h2>
+                <p class="text-sm text-slate-600 mt-1">Estado actual de los contenedores y flujo de trabajo del sistema.</p>
+            </div>
+            <div class="bg-slate-200 border border-slate-200 rounded-xl overflow-hidden grid grid-cols-2 lg:grid-cols-4 gap-px">
+                <div class="bg-white p-5"><span class="text-sm text-slate-500">En monitoreo</span><p id="home-stat-active" class="tnum text-3xl font-semibold text-maritime-700 mt-1">0</p></div>
+                <div class="bg-white p-5"><span class="text-sm text-slate-500">Vencidos</span><p id="home-stat-red" class="tnum text-3xl font-semibold text-rose-700 mt-1">0</p></div>
+                <div class="bg-white p-5"><span class="text-sm text-slate-500">Por vencer (0 a 3 días)</span><p id="home-stat-yellow" class="tnum text-3xl font-semibold text-amber-700 mt-1">0</p></div>
+                <div class="bg-white p-5"><span class="text-sm text-slate-500">Dictaminados</span><p id="home-stat-returned" class="tnum text-3xl font-semibold text-emerald-700 mt-1">0</p></div>
+            </div>
+
+            <h3 class="font-serif text-xl font-semibold text-maritime-700 mt-12 mb-5">Flujo de trabajo</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <button onclick="navigateTo('stage1')" class="text-left bg-white border border-slate-200 rounded-xl p-6 hover:border-maritime-500 transition flex flex-col">
+                    <span class="font-serif text-3xl font-semibold text-brass">1</span>
+                    <span class="font-semibold text-slate-900 text-lg mt-3">Captura del contenedor</span>
+                    <span class="text-sm text-slate-600 leading-relaxed mt-2 mb-5">El ejecutivo registra el código ISO 6346 y la fecha límite, y puede agregar varias compañías con sus códigos de producto en cargas consolidadas.</span>
+                    <span class="mt-auto text-sm font-medium text-maritime-600">Abrir captura</span>
+                </button>
+                <button onclick="navigateTo('stage2')" class="text-left bg-white border border-slate-200 rounded-xl p-6 hover:border-maritime-500 transition flex flex-col">
+                    <span class="font-serif text-3xl font-semibold text-brass">2</span>
+                    <span class="font-semibold text-slate-900 text-lg mt-3">Monitoreo con semáforo</span>
+                    <span class="text-sm text-slate-600 leading-relaxed mt-2 mb-5">Calcula los días restantes (<span class="text-emerald-700 font-medium">verde</span>, <span class="text-amber-700 font-medium">amarillo</span>, <span class="text-rose-700 font-medium">rojo</span>) y permite consultar el desglose de compañías y productos de cada contenedor.</span>
+                    <span class="mt-auto text-sm font-medium text-maritime-600">Abrir tablero</span>
+                </button>
+                <button onclick="navigateTo('stage3')" class="text-left bg-white border border-slate-200 rounded-xl p-6 hover:border-maritime-500 transition flex flex-col">
+                    <span class="font-serif text-3xl font-semibold text-brass">3</span>
+                    <span class="font-semibold text-slate-900 text-lg mt-3">Dictamen y documentos</span>
+                    <span class="text-sm text-slate-600 leading-relaxed mt-2 mb-5">Registra si el contenedor fue aceptado o rechazado, con su motivo técnico, y expide la constancia oficial imprimible.</span>
+                    <span class="mt-auto text-sm font-medium text-maritime-600">Abrir dictamen</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- VIEW 1: ETAPA 1 - CAPTURA MANUAL DEL CONTENEDOR                   -->
+        <!-- ================================================================= -->
+        <section id="view-stage1" class="view-section">
+            <div class="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div>
+                    <span class="text-sm font-medium text-slate-500">Etapa 1 • Ejecutivo de Tráfico</span>
+                    <h2 class="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mt-2">
+                        Captura manual del contenedor
+                    </h2>
+                    <p class="text-sm text-slate-600 mt-1">
+                        Ingresa los datos del contenedor. Si lleva mercancía consolidada, activa la opción de varias compañías y códigos de producto.
+                    </p>
+                </div>
+                <button onclick="navigateTo('stage2')" class="text-xs font-bold text-maritime-600 hover:text-maritime-800 bg-white border border-slate-200 px-4 py-2.5 rounded-xl shadow-xs transition self-start">
+                    Ir al tablero
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <!-- Left Column: Form -->
+                <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                    <div class="bg-maritime-600 px-6 py-4 flex items-center justify-between text-white">
+                        <h3 class="font-semibold text-base">Registro de contenedor</h3>
+                        <span class="text-xs text-maritime-100 bg-maritime-700 px-2.5 py-1 rounded-lg">Validación ISO 6346</span>
+                    </div>
+
+                    <form id="container-form" class="p-6 sm:p-8 space-y-6" novalidate>
+                        <!-- Field 1 -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="container-number" class="block text-sm font-bold text-slate-800">
+                                    Número de contenedor <span class="text-rose-500">*</span>
+                                </label>
+                                <span id="iso-badge" class="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-500">
+                                    Formato: 4 letras + 7 dígitos
+                                </span>
+                            </div>
+                            <input 
+                                type="text" 
+                                id="container-number" 
+                                maxlength="11"
+                                placeholder="Ej. MSKU1234567"
+                                autocomplete="off"
+                                class="w-full font-mono uppercase text-base px-4 py-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-maritime-500 transition-all"
+                                required
+                            >
+                            <div class="flex justify-between items-center mt-1.5">
+                                <p class="text-xs text-slate-500">4 letras mayúsculas + 7 números sin espacios.</p>
+                                <button type="button" onclick="fillSampleContainer()" class="text-xs text-maritime-600 hover:text-amber-600 font-semibold underline">
+                                    Generar ejemplo
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Field 2 + Multi-Company Toggle -->
+                        <div>
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                                <label for="client-name" class="block text-sm font-bold text-slate-800">
+                                    Cliente o importador principal <span class="text-rose-500">*</span>
+                                </label>
+                                <label class="inline-flex items-center cursor-pointer space-x-2 text-xs font-bold text-maritime-700 bg-maritime-50 hover:bg-maritime-100 px-3 py-1 rounded-lg border border-maritime-200 transition">
+                                    <input type="checkbox" id="multi-company-toggle" onchange="toggleMultiCompany()" class="rounded text-maritime-600 focus:ring-maritime-500">
+                                    <span>Carga consolidada</span>
+                                </label>
+                            </div>
+                            <input 
+                                type="text" 
+                                id="client-name" 
+                                list="clients-list"
+                                placeholder="Selecciona o escribe el nombre del cliente principal"
+                                class="w-full text-sm px-4 py-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-maritime-500 transition-all"
+                                required
+                            >
+                            <datalist id="clients-list">
+                                <option value="Importadora del Golfo S.A. de C.V.">
+                                <option value="Comercializadora Industrial Veracruz">
+                                <option value="Grupo Logístico del Sureste">
+                                <option value="Aceros y Metales Nacionales">
+                                <option value="Alimentos Procesados del Centro">
+                            </datalist>
+                            <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                                <span class="text-[11px] text-slate-400 mr-1">Frecuentes:</span>
+                                <button type="button" onclick="selectClient('Importadora del Golfo S.A. de C.V.')" class="text-[11px] bg-slate-100 hover:bg-maritime-50 hover:text-maritime-700 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200 transition">
+                                    Importadora del Golfo
+                                </button>
+                                <button type="button" onclick="selectClient('Grupo Logístico del Sureste')" class="text-[11px] bg-slate-100 hover:bg-maritime-50 hover:text-maritime-700 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200 transition">
+                                    Grupo Logístico Sureste
+                                </button>
+                            </div>
+
+                            <!-- Multi-Company & Product Codes Section -->
+                            <div id="multi-company-box" class="hidden mt-4 p-4 bg-maritime-50/70 border border-maritime-200 rounded-xl space-y-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <h4 class="text-xs font-bold text-maritime-700">Desglose de Compañías y Productos (Consolidado)</h4>
+                                        <p class="text-[11px] text-slate-500">Agrega cada compañía adicional, código de producto y descripción.</p>
+                                    </div>
+                                    <button type="button" onclick="addCompanyRow()" class="bg-maritime-600 hover:bg-maritime-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs transition">
+                                        Agregar compañía
+                                    </button>
+                                </div>
+                                <div id="company-rows-container" class="space-y-2.5"></div>
+                            </div>
+                        </div>
+
+                        <!-- Field 3 -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="due-date" class="block text-sm font-bold text-slate-800 mb-1.5">
+                                    Fecha límite de devolución <span class="text-rose-500">*</span>
+                                </label>
+                                <input 
+                                    type="date" 
+                                    id="due-date" 
+                                    class="w-full text-sm px-4 py-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-maritime-500 transition-all"
+                                    required
+                                >
+                            </div>
+
+                            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-center">
+                                <span class="text-[11px] font-semibold text-slate-400">Vista previa del semáforo</span>
+                                <div id="semaphore-preview" class="mt-1 flex items-center space-x-2">
+                                    <span class="w-3 h-3 rounded-full bg-slate-300"></span>
+                                    <span class="text-xs font-medium text-slate-500">Selecciona una fecha</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Optional Shipping Line -->
+                        <div class="pt-2 border-t border-slate-100">
+                            <label for="shipping-line" class="block text-xs font-semibold text-slate-600 mb-1.5">Naviera (Opcional)</label>
+                            <select id="shipping-line" class="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700">
+                                <option value="auto">Auto-detectar por prefijo ISO</option>
+                                <option value="Maersk Line">Maersk Line</option>
+                                <option value="MSC">MSC</option>
+                                <option value="CMA CGM">CMA CGM</option>
+                                <option value="Hapag-Lloyd">Hapag-Lloyd</option>
+                                <option value="COSCO Shipping">COSCO Shipping</option>
+                            </select>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="pt-4 flex flex-col sm:flex-row items-center justify-end gap-3">
+                            <button type="button" onclick="resetStage1Form()" class="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition">
+                                Limpiar
+                            </button>
+                            <button type="submit" class="w-full sm:w-auto px-6 py-3 rounded-xl bg-maritime-500 hover:bg-maritime-600 text-white font-bold text-sm shadow-md transition flex items-center justify-center space-x-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                                <span>Registrar contenedor</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Right Column: Live Feed -->
+                <div class="lg:col-span-5 space-y-6">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Contenedores en monitoreo</h3>
+                                <p class="text-xs text-slate-500">Sincronizado con el Tablero Semáforo</p>
+                            </div>
+                            <span id="stage1-count" class="bg-maritime-50 text-maritime-700 font-bold text-xs px-3 py-1 rounded-full border border-maritime-100">0 activos</span>
+                        </div>
+                        <div id="stage1-recent-list" class="space-y-3 max-h-[380px] overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- VIEW 2: ETAPA 2 - TABLERO VISUAL SEMÁFORO                         -->
+        <!-- ================================================================= -->
+        <section id="view-stage2" class="view-section">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                <div>
+                    <span class="text-sm font-medium text-slate-500">Etapa 2 • Monitoreo Operativo</span>
+                    <h2 class="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mt-2">
+                        Tablero visual con semáforo
+                    </h2>
+                    <p class="text-sm text-slate-600 mt-1">
+                        Ordenado por urgencia crítica (<span class="font-mono text-xs bg-slate-200/70 px-1.5 py-0.5 rounded text-slate-800">días = fecha límite − hoy</span>). Consulta el desglose de compañías cuando sea carga consolidada.
+                    </p>
+                </div>
+                <button onclick="navigateTo('stage1')" class="bg-maritime-600 hover:bg-maritime-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition self-start flex items-center space-x-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span>Capturar contenedor</span>
+                </button>
+            </div>
+
+            <!-- 4 KPI Filter Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <button onclick="setS2Filter('all')" id="s2-card-all" class="s2-kpi text-left bg-white p-5 rounded-2xl border-2 border-maritime-500 shadow-xs transition">
+                    <span class="text-xs font-bold text-slate-500">Total en monitoreo</span>
+                    <div class="mt-2 flex items-baseline space-x-2">
+                        <span id="s2-kpi-total" class="text-3xl font-semibold text-slate-900">0</span>
+                        <span class="text-xs text-slate-500">activos</span>
+                    </div>
+                </button>
+
+                <button onclick="setS2Filter('red')" id="s2-card-red" class="s2-kpi text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-rose-400 transition">
+                    <span class="text-xs font-bold text-rose-700 flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Vencidos
+                    </span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="s2-kpi-red" class="text-3xl font-semibold text-rose-600">0</span>
+                        <span class="text-[11px] font-semibold bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md">Multa USD</span>
+                    </div>
+                </button>
+
+                <button onclick="setS2Filter('yellow')" id="s2-card-yellow" class="s2-kpi text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-amber-400 transition">
+                    <span class="text-xs font-bold text-amber-700 flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Riesgo (0 a 3 días)
+                    </span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="s2-kpi-yellow" class="text-3xl font-semibold text-amber-600">0</span>
+                        <span class="text-[11px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">Prioridad</span>
+                    </div>
+                </button>
+
+                <button onclick="setS2Filter('green')" id="s2-card-green" class="s2-kpi text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 transition">
+                    <span class="text-xs font-bold text-emerald-700 flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> A tiempo (más de 3 días)
+                    </span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="s2-kpi-green" class="text-3xl font-semibold text-emerald-600">0</span>
+                        <span class="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">Seguro</span>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Search & Pills -->
+            <div class="bg-white rounded-t-2xl border border-b-0 border-slate-200 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="relative w-full md:w-80">
+                    <input type="text" id="s2-search" placeholder="Buscar contenedor, cliente o producto..." class="w-full pl-4 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-maritime-500">
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="setS2Filter('all')" data-s2filter="all" class="s2-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-maritime-600 text-white">Todos</button>
+                    <button onclick="setS2Filter('red')" data-s2filter="red" class="s2-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600">Vencidos</button>
+                    <button onclick="setS2Filter('yellow')" data-s2filter="yellow" class="s2-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600">Riesgo (0-3d)</button>
+                    <button onclick="setS2Filter('green')" data-s2filter="green" class="s2-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600">A Tiempo</button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="bg-white rounded-b-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="resp-table w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                                <th class="py-3.5 px-4">Semáforo</th>
+                                <th class="py-3.5 px-4">Contenedor</th>
+                                <th class="py-3.5 px-4">Cliente / compañías</th>
+                                <th class="py-3.5 px-4">Naviera</th>
+                                <th class="py-3.5 px-4">Fecha límite</th>
+                                <th class="py-3.5 px-4">Tiempo restante</th>
+                                <th class="py-3.5 px-4 text-right">Multa estimada</th>
+                                <th class="py-3.5 px-4 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="s2-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+                <div id="s2-empty" class="hidden py-12 text-center text-xs text-slate-500">No se encontraron contenedores con este filtro.</div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- VIEW 3: ETAPA 3 - DICTAMEN, DEVOLUCIÓN Y EXPEDICIÓN DE DOCUMENTOS -->
+        <!-- ================================================================= -->
+        <section id="view-stage3" class="view-section">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+                <div>
+                    <span class="text-sm font-medium text-slate-500">Etapa 3 • Dictamen y Expedición Oficial</span>
+                    <h2 class="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mt-2">
+                        Dictamen de contenedor y expedición de documentos
+                    </h2>
+                    <p class="text-sm text-slate-600 mt-1">
+                        Dictamina si el contenedor fue <strong>Aceptado</strong> o <strong>Rechazado</strong> (documentando el motivo técnico) para expedir su constancia oficial.
+                    </p>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                    <span class="text-xs font-bold text-slate-500">Pendientes de dictamen</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="s3-kpi-active" class="text-3xl font-semibold text-maritime-700">0</span>
+                        <span class="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">En Monitoreo</span>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                    <span class="text-xs font-bold text-emerald-700">Documentos expedidos</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="s3-kpi-returned" class="text-3xl font-semibold text-emerald-600">0</span>
+                        <span class="text-xs font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">Aceptados / Rechazados</span>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                    <span class="text-xs font-bold text-slate-500">Multas evitadas (estimado)</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="s3-kpi-saved" class="text-3xl font-semibold text-slate-900">$0</span>
+                        <span class="text-xs font-medium text-slate-500">USD protegidos</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs & Search -->
+            <div class="bg-white rounded-t-2xl border border-b-0 border-slate-200 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex md:inline-flex p-1 bg-slate-100 rounded-xl">
+                    <button id="s3-tab-active" onclick="switchS3Tab('active')" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-bold bg-white text-maritime-700 shadow-xs transition">
+                        Pendientes de dictamen (<span id="s3-badge-active">0</span>)
+                    </button>
+                    <button id="s3-tab-returned" onclick="switchS3Tab('returned')" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 transition">
+                        Historial y documentos expedidos (<span id="s3-badge-returned">0</span>)
+                    </button>
+                </div>
+                <input type="text" id="s3-search" placeholder="Buscar contenedor, cliente o folio..." class="w-full md:w-72 px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-maritime-500">
+            </div>
+
+            <!-- Table -->
+            <div class="bg-white rounded-b-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="resp-table w-full text-left border-collapse">
+                        <thead id="s3-thead"></thead>
+                        <tbody id="s3-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+                <div id="s3-empty" class="hidden py-12 text-center text-xs text-slate-500">No hay registros en esta pestaña.</div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL: CONFIRMAR DICTAMEN (ACEPTADO O RECHAZADO) Y EXPEDIR DOCUMENTO  -->
+    <!-- ===================================================================== -->
+    <div id="return-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-maritime-700 px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="font-bold text-base">Dictamen y expedición de documento</h3>
+                <button onclick="closeReturnModal()" class="text-maritime-200 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <form id="return-form" class="p-6 space-y-4">
+                <input type="hidden" id="modal-container-id">
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Contenedor:</span>
+                        <span id="modal-display-code" class="font-mono font-bold text-maritime-700"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Cliente:</span>
+                        <span id="modal-display-client" class="font-semibold text-slate-800"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Fecha límite:</span>
+                        <span id="modal-display-due" class="font-semibold text-slate-700"></span>
+                    </div>
+                </div>
+
+                <!-- Tipo de Dictamen -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Resultado de inspección en terminal <span class="text-rose-500">*</span></label>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="inspection-result" value="accepted" checked onchange="toggleRejectReason()" class="peer sr-only">
+                            <div class="p-3 rounded-xl border-2 border-slate-200 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 text-center transition">
+                                <span class="block text-xs font-semibold text-emerald-800">Aceptado</span>
+                                <span class="block text-[10px] text-slate-500 mt-0.5">Devolución conforme</span>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="inspection-result" value="rejected" onchange="toggleRejectReason()" class="peer sr-only">
+                            <div class="p-3 rounded-xl border-2 border-slate-200 peer-checked:border-rose-600 peer-checked:bg-rose-50 text-center transition">
+                                <span class="block text-xs font-semibold text-rose-800">Rechazado</span>
+                                <span class="block text-[10px] text-slate-500 mt-0.5">Expedir acta de rechazo</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Motivo del Rechazo -->
+                <div id="reject-reason-box" class="hidden space-y-1.5 bg-rose-50/70 p-3.5 rounded-xl border border-rose-200">
+                    <label for="reject-reason" class="block text-xs font-bold text-rose-800">Motivo Oficial del Rechazo <span class="text-rose-600">*</span></label>
+                    <textarea id="reject-reason" rows="2" placeholder="Ej. Daño estructural en panel lateral izquierdo y piso contaminado con residuos químicos." class="w-full text-xs px-3 py-2 rounded-lg border border-rose-300 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
+                    <p class="text-[10px] text-rose-700">Este motivo quedará impreso en el documento oficial de rechazo.</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="eir-folio" class="block text-xs font-bold text-slate-700 mb-1">Folio</label>
+                        <input type="text" id="eir-folio" class="w-full font-mono uppercase text-xs px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-maritime-500">
+                    </div>
+                    <div>
+                        <label for="return-date" class="block text-xs font-bold text-slate-700 mb-1">Fecha de Dictamen <span class="text-rose-500">*</span></label>
+                        <input type="date" id="return-date" required class="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-maritime-500">
+                    </div>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="button" onclick="closeReturnModal()" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                    <button type="submit" id="btn-submit-dictamen" class="px-5 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow">Expedir Acta de Aceptación</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL: VER COMPAÑÍAS Y CÓDIGOS DE PRODUCTO DEL CONTENEDOR             -->
+    <!-- ===================================================================== -->
+    <div id="companies-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-maritime-600 px-6 py-4 flex items-center justify-between text-white">
+                <div>
+                    <h3 class="font-bold text-base">Carga Consolidada — Compañías y Productos</h3>
+                    <p id="comp-modal-subtitle" class="text-xs text-maritime-200 font-mono mt-0.5"></p>
+                </div>
+                <button onclick="closeCompaniesModal()" class="text-maritime-200 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <div id="comp-modal-list" class="space-y-3 max-h-80 overflow-y-auto"></div>
+                <div class="mt-5 flex justify-end">
+                    <button onclick="closeCompaniesModal()" class="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL: EXPEDICIÓN DE DOCUMENTO OFICIAL (ACEPTADO O RECHAZADO)         -->
+    <!-- ===================================================================== -->
+    <div id="doc-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-slate-900 px-6 py-4 flex items-center justify-between text-white shrink-0">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <h3 class="font-bold text-sm sm:text-base">Documento Oficial Expedido</h3>
+                </div>
+                <button onclick="closeDocModal()" class="text-slate-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Printable Document Sheet -->
+            <div id="printable-document" class="p-6 sm:p-8 overflow-y-auto bg-white text-slate-800 space-y-6"></div>
+
+            <div class="bg-slate-50 border-t border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <span class="text-[11px] text-slate-500">Documento válido para control interno y auditoría naviera.</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeDocModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl">Cerrar</button>
+                    <button onclick="printOfficialDocument()" class="px-5 py-2 text-xs font-bold bg-maritime-600 hover:bg-maritime-700 text-white rounded-xl shadow flex items-center space-x-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                        <span>Imprimir / Guardar PDF</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-5 text-center text-xs text-slate-500 mt-12">
+        <p>© 2026 ControlDemoras SaaS — Sistema Integrado de Control de Demoras para Contenedores Marítimos</p>
+    </footer>
+
+    <!-- ===================================================================== -->
+    <!-- UNIFIED APPLICATION JAVASCRIPT                                        -->
+    <!-- ===================================================================== -->
+    <script>
+        function getRelativeDate(offsetDays) {
+            const d = new Date();
+            d.setDate(d.getDate() + offsetDays);
+            return d.toISOString().split('T')[0];
+        }
+
+        function formatDisplayDate(dateStr) {
+            if (!dateStr) return '-';
+            const [y, m, d] = dateStr.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        const isoPrefixes = {
+            'MSKU': 'Maersk Line',
+            'MAEU': 'Maersk Line',
+            'MSCU': 'MSC',
+            'MEDU': 'MSC',
+            'CMAU': 'CMA CGM',
+            'HLCU': 'Hapag-Lloyd',
+            'COSU': 'COSCO Shipping',
+            'TCLU': 'MSC'
+        };
+
+        // Single Source of Truth for the entire app
+        let appRecords = [
+            { 
+                id: 'TCLU9876543', client: 'Comercializadora del Sur S.A.', shippingLine: 'MSC', dueDate: getRelativeDate(-2), 
+                status: 'active', returnedDate: null, eir: null, dailyRate: 135, docStatus: null, rejectReason: null,
+                companies: [
+                    { name: 'Comercializadora del Sur S.A.', productCode: 'PROD-8471-MX', description: 'Componentes electrónicos industriales' },
+                    { name: 'Distribuidora Textil del Centro', productCode: 'TEX-2094-VER', description: 'Rollos de tela sintética' }
+                ]
+            },
+            { 
+                id: 'CMAU7738291', client: 'Importadora del Golfo S.A. de C.V.', shippingLine: 'CMA CGM', dueDate: getRelativeDate(0), 
+                status: 'active', returnedDate: null, eir: null, dailyRate: 125, docStatus: null, rejectReason: null,
+                companies: []
+            },
+            { 
+                id: 'HLCU5519203', client: 'Grupo Logístico del Sureste', shippingLine: 'Hapag-Lloyd', dueDate: getRelativeDate(2), 
+                status: 'active', returnedDate: null, eir: null, dailyRate: 130, docStatus: null, rejectReason: null,
+                companies: [
+                    { name: 'Grupo Logístico del Sureste', productCode: 'GLS-9910-A', description: 'Maquinaria ligera empaquetada' },
+                    { name: 'Ferretera Industrial del Puerto', productCode: 'FIP-3321-B', description: 'Válvulas de acero inoxidable' },
+                    { name: 'Químicos y Resinas de Veracruz', productCode: 'QRV-7740-C', description: 'Polímeros en sacos paletizados' }
+                ]
+            },
+            { id: 'MAEU9048213', client: 'Importadora del Golfo S.A. de C.V.', shippingLine: 'Maersk Line', dueDate: getRelativeDate(6), status: 'active', returnedDate: null, eir: null, dailyRate: 120, docStatus: null, rejectReason: null, companies: [] },
+            { id: 'COSU6612094', client: 'Comercializadora Industrial Veracruz', shippingLine: 'COSCO Shipping', dueDate: getRelativeDate(10), status: 'active', returnedDate: null, eir: null, dailyRate: 115, docStatus: null, rejectReason: null, companies: [] },
+            // Closed records for Stage 3 audit tab (1 Accepted, 1 Rejected)
+            { id: 'MAEU8120495', client: 'Aceros y Metales Nacionales', shippingLine: 'Maersk Line', dueDate: getRelativeDate(-2), status: 'returned', returnedDate: getRelativeDate(-3), eir: 'DOC-ACP-88310', dailyRate: 120, docStatus: 'accepted', rejectReason: null, companies: [] },
+            { id: 'MSCU1194028', client: 'Alimentos Procesados del Centro', shippingLine: 'MSC', dueDate: getRelativeDate(1), status: 'returned', returnedDate: getRelativeDate(-1), eir: 'DOC-RCH-88402', dailyRate: 135, docStatus: 'rejected', rejectReason: 'Piso de madera con manchas de humedad y golpe estructural en puerta derecha.', companies: [] }
+        ];
+
+        function evaluateSemaphore(dueDateStr) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const [y, m, d] = dueDateStr.split('-').map(Number);
+            const due = new Date(y, m - 1, d);
+            const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 0) {
+                const overdue = Math.abs(diffDays);
+                return {
+                    status: 'red',
+                    days: diffDays,
+                    rowBg: 'bg-rose-50/70 hover:bg-rose-100/70',
+                    badge: 'bg-rose-100 text-rose-800 border-rose-200',
+                    dot: 'bg-rose-600',
+                    statusText: 'Vencido',
+                    daysText: `Hace ${overdue} ${overdue === 1 ? 'día' : 'días'}`,
+                    daysColor: 'text-rose-700 font-semibold'
+                };
+            } else if (diffDays <= 3) {
+                return {
+                    status: 'yellow',
+                    days: diffDays,
+                    rowBg: 'bg-amber-50/60 hover:bg-amber-100/60',
+                    badge: 'bg-amber-100 text-amber-800 border-amber-200',
+                    dot: 'bg-amber-500',
+                    statusText: 'Por vencer',
+                    daysText: diffDays === 0 ? 'Vence hoy' : `${diffDays} ${diffDays === 1 ? 'día rest.' : 'días rest.'}`,
+                    daysColor: 'text-amber-700 font-bold'
+                };
+            } else {
+                return {
+                    status: 'green',
+                    days: diffDays,
+                    rowBg: 'bg-white hover:bg-emerald-50/40',
+                    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                    dot: 'bg-emerald-500',
+                    statusText: 'A tiempo',
+                    daysText: `${diffDays} días libres`,
+                    daysColor: 'text-emerald-700 font-semibold'
+                };
+            }
+        }
+
+        function isValidISO6346(code) {
+            return /^[A-Z]{4}[0-9]{7}$/.test(code);
+        }
+
+        // --- 2. NAVIGATION ROUTER ---
+        function navigateTo(viewId) {
+            document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
+            const target = document.getElementById(`view-${viewId}`);
+            if (target) target.classList.add('active');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.className = "nav-btn h-16 flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 border-b-2 border-transparent transition";
+            });
+            const activeNav = document.getElementById(`nav-${viewId}`);
+            if (activeNav) {
+                activeNav.className = "nav-btn h-16 flex items-center gap-1.5 text-sm font-semibold text-maritime-700 border-b-2 border-maritime-700 transition";
+            }
+
+            document.querySelectorAll('.mnav-btn').forEach(btn => {
+                btn.className = "mnav-btn py-2.5 rounded-lg text-[11px] font-medium text-slate-600";
+            });
+            const activeMNav = document.getElementById(`mnav-${viewId}`);
+            if (activeMNav) {
+                activeMNav.className = "mnav-btn py-2.5 rounded-lg text-[11px] font-semibold bg-maritime-600 text-white";
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            refreshAllViews();
+        }
+
+        // --- 3. STAGE 1 LOGIC (CAPTURE + MULTI-COMPANY) ---
+        const cInput = document.getElementById('container-number');
+        const isoBadge = document.getElementById('iso-badge');
+        const dueInput = document.getElementById('due-date');
+        const semPreview = document.getElementById('semaphore-preview');
+
+        cInput.addEventListener('input', function(e) {
+            let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            e.target.value = val;
+
+            if (val.length === 0) {
+                isoBadge.textContent = 'Formato: 4 letras + 7 dígitos';
+                isoBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-500';
+                cInput.classList.remove('border-emerald-500');
+            } else if (isValidISO6346(val)) {
+                isoBadge.textContent = 'ISO 6346 válido';
+                isoBadge.className = 'text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800';
+                cInput.classList.add('border-emerald-500');
+            } else {
+                isoBadge.textContent = `${val.length}/11 caracteres`;
+                isoBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-amber-100 text-amber-800';
+                cInput.classList.remove('border-emerald-500');
+            }
+        });
+
+        dueInput.addEventListener('change', function(e) {
+            if (!e.target.value) {
+                semPreview.innerHTML = `<span class="w-3 h-3 rounded-full bg-slate-300"></span><span class="text-xs font-medium text-slate-500">Selecciona una fecha</span>`;
+                return;
+            }
+            const meta = evaluateSemaphore(e.target.value);
+            semPreview.innerHTML = `<span class="w-3 h-3 rounded-full ${meta.dot}"></span><span class="text-xs font-bold text-slate-800">${meta.statusText} (${meta.daysText})</span>`;
+        });
+
+        function selectClient(name) {
+            document.getElementById('client-name').value = name;
+        }
+
+        function fillSampleContainer() {
+            const prefixes = ['MSKU', 'MSCU', 'CMAU', 'HLCU', 'COSU'];
+            const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const d = Math.floor(1000000 + Math.random() * 9000000);
+            cInput.value = `${p}${d}`;
+            cInput.dispatchEvent(new Event('input'));
+        }
+
+        function resetStage1Form() {
+            document.getElementById('container-form').reset();
+            document.getElementById('multi-company-box').classList.add('hidden');
+            document.getElementById('company-rows-container').innerHTML = '';
+            cInput.dispatchEvent(new Event('input'));
+            dueInput.value = getRelativeDate(5);
+            dueInput.dispatchEvent(new Event('change'));
+        }
+
+        function toggleMultiCompany() {
+            const isChecked = document.getElementById('multi-company-toggle').checked;
+            const box = document.getElementById('multi-company-box');
+            const container = document.getElementById('company-rows-container');
+            if (isChecked) {
+                box.classList.remove('hidden');
+                if (container.children.length === 0) {
+                    addCompanyRow();
+                }
+            } else {
+                box.classList.add('hidden');
+            }
+        }
+
+        function addCompanyRow() {
+            const container = document.getElementById('company-rows-container');
+            const row = document.createElement('div');
+            row.className = 'company-entry bg-white p-3 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center';
+            row.innerHTML = `
+                <div class="sm:col-span-5">
+                    <input type="text" placeholder="Nombre de compañía" class="comp-name w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-maritime-500">
+                </div>
+                <div class="sm:col-span-3">
+                    <input type="text" placeholder="Cód. Producto" class="comp-code font-mono uppercase w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-maritime-500">
+                </div>
+                <div class="sm:col-span-3">
+                    <input type="text" placeholder="Descripción" class="comp-desc w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-maritime-500">
+                </div>
+                <div class="sm:col-span-1 text-right">
+                    <button type="button" onclick="this.closest('.company-entry').remove()" class="text-rose-500 hover:text-rose-700 p-1 font-bold text-xs" title="Eliminar fila">✕</button>
+                </div>
+            `;
+            container.appendChild(row);
+        }
+
+        document.getElementById('container-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const code = cInput.value.trim().toUpperCase();
+            const client = document.getElementById('client-name').value.trim();
+            const dueDate = dueInput.value;
+            let shippingLine = document.getElementById('shipping-line').value;
+
+            if (!isValidISO6346(code)) {
+                showToast('Formato ISO no válido', 'Debe tener 4 letras y 7 números (Ej. MSKU1234567).', 'error');
+                return;
+            }
+            if (appRecords.some(r => r.id === code && r.status === 'active')) {
+                showToast('Contenedor duplicado', `${code} ya está activo en el semáforo.`, 'error');
+                return;
+            }
+            if (!client || !dueDate) {
+                showToast('Datos incompletos', 'Completa el cliente y la fecha límite.', 'error');
+                return;
+            }
+
+            if (shippingLine === 'auto') {
+                shippingLine = isoPrefixes[code.substring(0, 4)] || 'Naviera General';
+            }
+
+            const companies = [];
+            if (document.getElementById('multi-company-toggle').checked) {
+                document.querySelectorAll('.company-entry').forEach(row => {
+                    const cName = row.querySelector('.comp-name').value.trim();
+                    const cCode = row.querySelector('.comp-code').value.trim().toUpperCase();
+                    const cDesc = row.querySelector('.comp-desc').value.trim();
+                    if (cName || cCode) {
+                        companies.push({
+                            name: cName || 'Compañía Adicional',
+                            productCode: cCode || 'SIN-CODIGO',
+                            description: cDesc || 'Mercancía general'
+                        });
+                    }
+                });
+            }
+
+            appRecords.unshift({
+                id: code,
+                client,
+                shippingLine,
+                dueDate,
+                status: 'active',
+                returnedDate: null,
+                eir: null,
+                dailyRate: 125,
+                docStatus: null,
+                rejectReason: null,
+                companies
+            });
+
+            resetStage1Form();
+            refreshAllViews();
+            showToast('Contenedor registrado', `${code} ya está visible en el Tablero Semáforo.`);
+        });
+
+        function renderStage1Feed() {
+            const activeItems = appRecords.filter(r => r.status === 'active');
+            document.getElementById('stage1-count').textContent = `${activeItems.length} activos`;
+            document.getElementById('stage1-recent-list').innerHTML = activeItems.map(item => {
+                const meta = evaluateSemaphore(item.dueDate);
+                const multiBadge = item.companies && item.companies.length > 0
+                    ? `<span class="text-[10px] font-bold bg-maritime-100 text-maritime-700 px-2 py-0.5 rounded-md">+${item.companies.length} compañías</span>`
+                    : '';
+                return `
+                    <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono font-bold text-sm text-maritime-700">${item.id}</span>
+                                ${multiBadge}
+                            </div>
+                            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${meta.badge}">${meta.daysText}</span>
+                        </div>
+                        <p class="text-xs font-medium text-slate-700 truncate">${item.client}</p>
+                        <div class="flex justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                            <span>Límite: <strong>${formatDisplayDate(item.dueDate)}</strong></span>
+                            <span>${item.shippingLine}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- 4. STAGE 2 LOGIC (SEMAPHORE DASHBOARD + MULTI-COMPANY BUTTON) ---
+        let s2Filter = 'all';
+        let s2Search = '';
+
+        function setS2Filter(filter) {
+            s2Filter = filter;
+            document.querySelectorAll('.s2-kpi').forEach(c => {
+                c.classList.remove('border-2', 'border-maritime-500', 'border-rose-500', 'border-amber-500', 'border-emerald-500');
+                c.classList.add('border', 'border-slate-200');
+            });
+            const activeCard = document.getElementById(`s2-card-${filter}`);
+            if (activeCard) {
+                activeCard.classList.remove('border', 'border-slate-200');
+                activeCard.classList.add('border-2');
+                if (filter === 'all') activeCard.classList.add('border-maritime-500');
+                if (filter === 'red') activeCard.classList.add('border-rose-500');
+                if (filter === 'yellow') activeCard.classList.add('border-amber-500');
+                if (filter === 'green') activeCard.classList.add('border-emerald-500');
+            }
+
+            document.querySelectorAll('.s2-pill').forEach(p => {
+                p.className = p.dataset.s2filter === filter
+                    ? 's2-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-maritime-600 text-white'
+                    : 's2-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600';
+            });
+            renderStage2();
+        }
+
+        document.getElementById('s2-search').addEventListener('input', e => {
+            s2Search = e.target.value;
+            renderStage2();
+        });
+
+        function renderStage2() {
+            const active = appRecords.filter(r => r.status === 'active').map(r => ({
+                ...r,
+                meta: evaluateSemaphore(r.dueDate)
+            })).sort((a, b) => a.meta.days - b.meta.days);
+
+            const redCount = active.filter(c => c.meta.status === 'red').length;
+            const yellowCount = active.filter(c => c.meta.status === 'yellow').length;
+            const greenCount = active.filter(c => c.meta.status === 'green').length;
+
+            document.getElementById('s2-kpi-total').textContent = active.length;
+            document.getElementById('s2-kpi-red').textContent = redCount;
+            document.getElementById('s2-kpi-yellow').textContent = yellowCount;
+            document.getElementById('s2-kpi-green').textContent = greenCount;
+
+            const filtered = active.filter(item => {
+                const matchStatus = s2Filter === 'all' || item.meta.status === s2Filter;
+                const q = s2Search.toLowerCase();
+                const inCompanies = item.companies && item.companies.some(c => c.name.toLowerCase().includes(q) || c.productCode.toLowerCase().includes(q));
+                const matchSearch = item.id.toLowerCase().includes(q) || item.client.toLowerCase().includes(q) || inCompanies;
+                return matchStatus && matchSearch;
+            });
+
+            const tbody = document.getElementById('s2-tbody');
+            const empty = document.getElementById('s2-empty');
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            tbody.innerHTML = filtered.map(item => {
+                const m = item.meta;
+                const fine = m.days < 0 ? `$${Math.abs(m.days) * item.dailyRate} USD` : '$0 USD';
+                const fineCls = m.days < 0 ? 'text-rose-700 font-bold' : 'text-slate-400';
+                const hasCompanies = item.companies && item.companies.length > 0;
+                const companiesBtn = hasCompanies
+                    ? `<button onclick="openCompaniesModal('${item.id}')" class="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-maritime-700 bg-maritime-100 hover:bg-maritime-200 px-2.5 py-0.5 rounded-lg transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                        <span>Ver ${item.companies.length} compañías / productos</span>
+                       </button>`
+                    : '';
+
+                return `
+                    <tr class="${m.rowBg} transition-colors">
+                        <td class="py-3.5 px-4 whitespace-nowrap">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${m.badge}">
+                                <span class="w-2 h-2 rounded-full ${m.dot}"></span>${m.statusText}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 font-mono font-bold text-maritime-700 whitespace-nowrap">${item.id}</td>
+                        <td class="py-3.5 px-4">
+                            <div class="font-medium text-slate-800">${item.client}</div>
+                            ${companiesBtn}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600 whitespace-nowrap">${item.shippingLine}</td>
+                        <td class="py-3.5 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${formatDisplayDate(item.dueDate)}</td>
+                        <td class="py-3.5 px-4 text-xs whitespace-nowrap ${m.daysColor}">${m.daysText}</td>
+                        <td class="py-3.5 px-4 text-xs text-right font-mono whitespace-nowrap ${fineCls}">${fine}</td>
+                        <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                            <button onclick="openReturnModal('${item.id}')" class="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 hover:bg-emerald-200 px-3 py-1.5 rounded-lg transition">
+                                Dictaminar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- 5. STAGE 3 LOGIC (DICTAMEN & EXPEDICIÓN DE DOCUMENTOS) ---
+        let s3Tab = 'active';
+        let s3Search = '';
+
+        function switchS3Tab(tab) {
+            s3Tab = tab;
+            const tAct = document.getElementById('s3-tab-active');
+            const tRet = document.getElementById('s3-tab-returned');
+            if (tab === 'active') {
+                tAct.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-bold bg-white text-maritime-700 shadow-xs transition";
+                tRet.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 transition";
+            } else {
+                tRet.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-bold bg-white text-emerald-700 shadow-xs transition";
+                tAct.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 transition";
+            }
+            renderStage3();
+        }
+
+        document.getElementById('s3-search').addEventListener('input', e => {
+            s3Search = e.target.value;
+            renderStage3();
+        });
+
+        function renderStage3() {
+            const active = appRecords.filter(r => r.status === 'active');
+            const returned = appRecords.filter(r => r.status === 'returned');
+
+            document.getElementById('s3-kpi-active').textContent = active.length;
+            document.getElementById('s3-kpi-returned').textContent = returned.length;
+            document.getElementById('s3-badge-active').textContent = active.length;
+            document.getElementById('s3-badge-returned').textContent = returned.length;
+
+            const saved = returned.reduce((acc, r) => acc + (r.dailyRate * 3), 0);
+            document.getElementById('s3-kpi-saved').textContent = `$${saved.toLocaleString('en-US')}`;
+
+            const pool = s3Tab === 'active' ? active : returned;
+            const filtered = pool.filter(item => {
+                const q = s3Search.toLowerCase();
+                return item.id.toLowerCase().includes(q) || item.client.toLowerCase().includes(q) || (item.eir && item.eir.toLowerCase().includes(q));
+            });
+
+            const thead = document.getElementById('s3-thead');
+            const tbody = document.getElementById('s3-tbody');
+            const empty = document.getElementById('s3-empty');
+
+            if (s3Tab === 'active') {
+                thead.innerHTML = `
+                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                        <th class="py-3.5 px-4">Estado</th>
+                        <th class="py-3.5 px-4">Contenedor</th>
+                        <th class="py-3.5 px-4">Cliente</th>
+                        <th class="py-3.5 px-4">Fecha límite</th>
+                        <th class="py-3.5 px-4 text-right">Dictaminar y expedir</th>
+                    </tr>`;
+            } else {
+                thead.innerHTML = `
+                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                        <th class="py-3.5 px-4">Dictamen</th>
+                        <th class="py-3.5 px-4">Contenedor</th>
+                        <th class="py-3.5 px-4">Cliente / importador</th>
+                        <th class="py-3.5 px-4">Folio</th>
+                        <th class="py-3.5 px-4">Fecha de cierre</th>
+                        <th class="py-3.5 px-4 text-right">Documento Oficial</th>
+                    </tr>`;
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            if (s3Tab === 'active') {
+                tbody.innerHTML = filtered.map(item => {
+                    const meta = evaluateSemaphore(item.dueDate);
+                    return `
+                        <tr class="hover:bg-slate-50">
+                            <td class="py-3.5 px-4 whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${meta.badge}"><span class="w-2 h-2 rounded-full ${meta.dot}"></span>${meta.daysText}</span></td>
+                            <td class="py-3.5 px-4 font-mono font-bold text-maritime-700 whitespace-nowrap">${item.id}</td>
+                            <td class="py-3.5 px-4 font-medium text-slate-800">${item.client}</td>
+                            <td class="py-3.5 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${formatDisplayDate(item.dueDate)}</td>
+                            <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                                <button onclick="openReturnModal('${item.id}')" class="inline-flex items-center space-x-1.5 bg-maritime-600 hover:bg-maritime-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition">
+                                    <span>Aceptar / Rechazar</span>
+                                </button>
+                            </td>
+                        </tr>`;
+                }).join('');
+            } else {
+                tbody.innerHTML = filtered.map(item => {
+                    const isRejected = item.docStatus === 'rejected';
+                    const statusBadge = isRejected
+                        ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">Rechazado</span>`
+                        : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Aceptado</span>`;
+                    const docBtnClass = isRejected
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white';
+
+                    return `
+                        <tr class="hover:bg-slate-50">
+                            <td class="py-3.5 px-4 whitespace-nowrap">${statusBadge}</td>
+                            <td class="py-3.5 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">${item.id}</td>
+                            <td class="py-3.5 px-4">
+                                <div class="font-medium text-slate-700">${item.client}</div>
+                                ${isRejected && item.rejectReason ? `<p class="text-[11px] text-rose-600 mt-0.5 max-w-xs truncate" title="${item.rejectReason}">Motivo: ${item.rejectReason}</p>` : ''}
+                            </td>
+                            <td class="py-3.5 px-4 font-mono text-xs text-slate-600 whitespace-nowrap">${item.eir}</td>
+                            <td class="py-3.5 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${formatDisplayDate(item.returnedDate)}</td>
+                            <td class="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
+                                <button onclick="openOfficialDocModal('${item.id}')" class="inline-flex items-center gap-1 ${docBtnClass} text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs transition">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                    <span>Ver Documento</span>
+                                </button>
+                                <button onclick="reopenContainer('${item.id}')" class="text-xs text-slate-400 hover:text-amber-600 underline">Reactivar</button>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+        }
+
+        // --- 6. DICTAMEN & OFFICIAL DOCUMENT MODALS ---
+        function toggleRejectReason() {
+            const result = document.querySelector('input[name="inspection-result"]:checked').value;
+            const box = document.getElementById('reject-reason-box');
+            const btn = document.getElementById('btn-submit-dictamen');
+            const folioInput = document.getElementById('eir-folio');
+            const rnd = Math.floor(10000 + Math.random() * 90000);
+
+            if (result === 'rejected') {
+                box.classList.remove('hidden');
+                btn.className = 'px-5 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow';
+                btn.textContent = 'Expedir Acta de Rechazo';
+                folioInput.value = `DOC-RCH-${rnd}`;
+            } else {
+                box.classList.add('hidden');
+                btn.className = 'px-5 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow';
+                btn.textContent = 'Expedir Acta de Aceptación';
+                folioInput.value = `DOC-ACP-${rnd}`;
+            }
+        }
+
+        function openReturnModal(id) {
+            const item = appRecords.find(r => r.id === id);
+            if (!item) return;
+            document.getElementById('modal-container-id').value = item.id;
+            document.getElementById('modal-display-code').textContent = item.id;
+            document.getElementById('modal-display-client').textContent = item.client;
+            document.getElementById('modal-display-due').textContent = formatDisplayDate(item.dueDate);
+            document.getElementById('return-date').value = getRelativeDate(0);
+            document.getElementById('reject-reason').value = '';
+            document.querySelector('input[name="inspection-result"][value="accepted"]').checked = true;
+            toggleRejectReason();
+
+            const modal = document.getElementById('return-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeReturnModal() {
+            const modal = document.getElementById('return-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        document.getElementById('return-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id = document.getElementById('modal-container-id').value;
+            const result = document.querySelector('input[name="inspection-result"]:checked').value;
+            const reason = document.getElementById('reject-reason').value.trim();
+            const eir = document.getElementById('eir-folio').value.trim().toUpperCase() || 'CONFIRMADO';
+            const returnedDate = document.getElementById('return-date').value;
+
+            if (result === 'rejected' && !reason) {
+                showToast('Falta el motivo de rechazo', 'Debes especificar el porqué se rechazó el contenedor para expedir el documento.', 'error');
+                document.getElementById('reject-reason').focus();
+                return;
+            }
+
+            const idx = appRecords.findIndex(r => r.id === id);
+            if (idx !== -1) {
+                appRecords[idx].status = 'returned';
+                appRecords[idx].docStatus = result;
+                appRecords[idx].rejectReason = result === 'rejected' ? reason : null;
+                appRecords[idx].eir = eir;
+                appRecords[idx].returnedDate = returnedDate;
+            }
+            closeReturnModal();
+            refreshAllViews();
+            openOfficialDocModal(id);
+        });
+
+        function reopenContainer(id) {
+            const idx = appRecords.findIndex(r => r.id === id);
+            if (idx !== -1) {
+                appRecords[idx].status = 'active';
+                appRecords[idx].returnedDate = null;
+                appRecords[idx].docStatus = null;
+                appRecords[idx].rejectReason = null;
+                refreshAllViews();
+                showToast('Registro reactivado', `${id} volvió al Tablero Semáforo.`);
+            }
+        }
+
+        // --- MULTI-COMPANY MODAL ---
+        function openCompaniesModal(id) {
+            const item = appRecords.find(r => r.id === id);
+            if (!item) return;
+            document.getElementById('comp-modal-subtitle').textContent = `Contenedor: ${item.id} • Naviera: ${item.shippingLine}`;
+            const list = document.getElementById('comp-modal-list');
+            
+            if (!item.companies || item.companies.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-500">Este contenedor solo tiene registrado al cliente principal: <strong>${item.client}</strong>.</p>`;
+            } else {
+                list.innerHTML = item.companies.map((c, idx) => `
+                    <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-900">${idx + 1}. ${c.name}</span>
+                            <span class="font-mono text-[11px] font-bold bg-maritime-100 text-maritime-700 px-2 py-0.5 rounded">${c.productCode}</span>
+                        </div>
+                        <p class="text-xs text-slate-600">${c.description}</p>
+                    </div>
+                `).join('');
+            }
+
+            const modal = document.getElementById('companies-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCompaniesModal() {
+            const modal = document.getElementById('companies-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // --- OFFICIAL DOCUMENT MODAL ---
+        function openOfficialDocModal(id) {
+            const item = appRecords.find(r => r.id === id);
+            if (!item) return;
+
+            const isRejected = item.docStatus === 'rejected';
+            const docTitle = isRejected ? 'CONSTANCIA OFICIAL DE RECHAZO DE CONTENEDOR' : 'CONSTANCIA OFICIAL DE ACEPTACIÓN DE CONTENEDOR';
+            const stampClass = isRejected ? 'border-rose-600 text-rose-600 bg-rose-50' : 'border-emerald-600 text-emerald-600 bg-emerald-50';
+            const stampText = isRejected ? 'CONTENEDOR RECHAZADO' : 'CONTENEDOR ACEPTADO';
+
+            const companiesSection = (item.companies && item.companies.length > 0)
+                ? `<div class="border border-slate-200 rounded-xl p-4">
+                    <h4 class="text-xs font-bold text-slate-500 mb-2">Compañías y Códigos de Producto Consolidados</h4>
+                    <ul class="space-y-1.5 text-xs">
+                        ${item.companies.map(c => `<li class="flex justify-between border-b border-slate-100 pb-1"><span>${c.name} (${c.description})</span><strong class="font-mono">${c.productCode}</strong></li>`).join('')}
+                    </ul>
+                   </div>`
+                : '';
+
+            const verdictSection = isRejected
+                ? `<div class="bg-rose-50 border-2 border-rose-200 rounded-xl p-4 space-y-2">
+                    <h4 class="text-xs font-semibold text-rose-800">Dictamen: RECHAZADO — Motivo Técnico Documentado</h4>
+                    <p class="text-sm text-rose-950 font-medium leading-relaxed">${item.rejectReason}</p>
+                    <p class="text-[11px] text-rose-700 pt-1">Se requiere reparación, limpieza o validación adicional antes de autorizar la liberación definitiva.</p>
+                   </div>`
+                : `<div class="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 space-y-1.5">
+                    <h4 class="text-xs font-semibold text-emerald-800">Dictamen: ACEPTADO SIN OBSERVACIONES</h4>
+                    <p class="text-xs text-emerald-950 leading-relaxed">Por medio de la presente se hace constar que el equipo marítimo arriba identificado ha sido inspeccionado y <strong>ACEPTADO</strong> conforme a los estándares operativos de la terminal, quedando liberado de cargos posteriores por demora a partir de la fecha de emisión.</p>
+                   </div>`;
+
+            document.getElementById('printable-document').innerHTML = `
+                <div class="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <p class="text-[11px] font-bold uppercase tracking-widest text-maritime-600">ControlDemoras SaaS • Agencia Aduanal</p>
+                        <h2 class="text-lg sm:text-xl font-semibold text-slate-900 mt-1">${docTitle}</h2>
+                        <p class="text-xs text-slate-500">Puerto de Veracruz, México • Folio: <strong class="font-mono text-slate-800">${item.eir}</strong></p>
+                    </div>
+                    <div class="border-2 ${stampClass} px-3.5 py-2 rounded-xl font-semibold text-xs tracking-wider uppercase text-center shrink-0">
+                        ${stampText}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                    <div>
+                        <span class="text-slate-400 block">Número de Contenedor</span>
+                        <span class="font-mono font-bold text-sm text-slate-900">${item.id}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Línea Naviera</span>
+                        <span class="font-bold text-slate-800">${item.shippingLine}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Fecha de Dictamen</span>
+                        <span class="font-bold text-slate-800">${formatDisplayDate(item.returnedDate)}</span>
+                    </div>
+                    <div class="col-span-2 sm:col-span-3">
+                        <span class="text-slate-400 block">Cliente / Importador Principal</span>
+                        <span class="font-bold text-slate-900">${item.client}</span>
+                    </div>
+                </div>
+
+                ${companiesSection}
+                ${verdictSection}
+
+                <div class="pt-6 grid grid-cols-2 gap-8 text-center text-xs text-slate-500">
+                    <div class="border-t border-slate-300 pt-2">
+                        <p class="font-bold text-slate-700">Inspector de Patio / Terminal</p>
+                        <p>Firma y Sello de Recepción</p>
+                    </div>
+                    <div class="border-t border-slate-300 pt-2">
+                        <p class="font-bold text-slate-700">Ejecutivo de Tráfico</p>
+                        <p>Agencia Aduanal</p>
+                    </div>
+                </div>
+            `;
+
+            const modal = document.getElementById('doc-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeDocModal() {
+            const modal = document.getElementById('doc-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function printOfficialDocument() {
+            const content = document.getElementById('printable-document').innerHTML;
+            const win = window.open('', '_blank', 'width=800,height=700');
+            if (!win) {
+                showToast('Ventana bloqueada', 'Permite ventanas emergentes para imprimir o usa Ctrl+P.', 'error');
+                return;
+            }
+            win.document.write(`
+                <html><head><title>Documento Oficial - ControlDemoras</title>
+                <script src="https://cdn.tailwindcss.com"><\/script>
+                </head><body class="p-8 bg-white">${content}
+                <script>window.onload = function() { window.print(); };<\/script>
+                </body></html>
+            `);
+            win.document.close();
+        }
+
+        function heroSearch(e) {
+            e.preventDefault();
+            const q = document.getElementById('hero-search').value.trim();
+            s2Search = q;
+            document.getElementById('s2-search').value = q;
+            navigateTo('stage2');
+            setS2Filter('all');
+        }
+        function goToFilter(f) { navigateTo('stage2'); setS2Filter(f); }
+
+        // --- 7. TOAST & SYNC ---
+        function showToast(title, msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const border = type === 'success' ? 'border-emerald-500' : 'border-rose-500';
+            toast.className = `pointer-events-auto bg-slate-900 text-white border-l-4 ${border} rounded-xl shadow-xl p-4 max-w-sm text-xs transition-all duration-300`;
+            toast.innerHTML = `<p class="font-bold text-sm">${title}</p><p class="text-slate-300 mt-0.5">${msg}</p>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        function refreshAllViews() {
+            const active = appRecords.filter(r => r.status === 'active').map(r => evaluateSemaphore(r.dueDate));
+            const returned = appRecords.filter(r => r.status === 'returned');
+            const redCount = active.filter(m => m.status === 'red').length;
+            const yellowCount = active.filter(m => m.status === 'yellow').length;
+
+            document.getElementById('nav-badge-alert').textContent = redCount + yellowCount;
+            document.getElementById('nav-badge-returned').textContent = returned.length;
+            document.getElementById('home-stat-active').textContent = active.length;
+            document.getElementById('home-stat-red').textContent = redCount;
+            document.getElementById('home-stat-yellow').textContent = yellowCount;
+            document.getElementById('home-stat-returned').textContent = returned.length;
+
+            renderStage1Feed();
+            renderStage2();
+            renderStage3();
+        }
+
+        function labelCells(table) {
+            const heads = [...table.querySelectorAll('thead th')].map(t => t.textContent.trim());
+            table.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => td.setAttribute('data-label', heads[i] || '')));
+        }
+        document.querySelectorAll('.resp-table').forEach(t => {
+            new MutationObserver(() => labelCells(t)).observe(t.querySelector('tbody'), { childList: true });
+        });
+
+        window.onload = function() {
+            dueInput.value = getRelativeDate(5);
+            dueInput.dispatchEvent(new Event('change'));
+            navigateTo('home');
+        };
+    </script>
+</body>
+</html>
